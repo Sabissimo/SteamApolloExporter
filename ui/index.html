@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Steam → Apollo Exporter</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #0f1216;
+    --panel: #171b21;
+    --panel-2: #1e242c;
+    --line: #2a313b;
+    --text: #e6e9ee;
+    --muted: #8b95a3;
+    --accent: #5b8cff;
+    --accent-2: #3f6fe0;
+    --ok: #3fbf7f;
+    --warn: #e0a83f;
+    --err: #e25c5c;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+    user-select: none;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+    padding: 12px 18px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  h1 { font-size: 16px; font-weight: 600; margin: 0 8px 0 0; white-space: nowrap; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  .env { display: flex; gap: 14px; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+  .env b { color: var(--text); font-weight: 500; }
+  .env .bad { color: var(--err); }
+  .spacer { flex: 1; }
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center;
+    padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--bg);
+  }
+  input[type=search], select {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 7px 10px; font: inherit; outline: none;
+  }
+  input[type=search] { width: 240px; }
+  input[type=search]:focus, select:focus { border-color: var(--accent); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; background: var(--panel-2); color: var(--muted); padding: 7px 12px; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--accent-2); color: #fff; }
+  label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); cursor: pointer; }
+  button {
+    font: inherit; cursor: pointer; border-radius: 6px; padding: 7px 14px;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  }
+  button:hover:not(:disabled) { border-color: #3c4552; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: var(--accent-2); }
+  button.danger { color: var(--err); }
+  button.link { background: none; border: 0; color: var(--accent); padding: 4px 6px; }
+
+  main { flex: 1; overflow-y: auto; padding: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+  .card {
+    position: relative; border-radius: 8px; overflow: hidden; cursor: pointer;
+    background: var(--panel-2); border: 2px solid transparent;
+    transition: transform .08s ease, border-color .08s ease;
+  }
+  .card:hover { transform: translateY(-2px); }
+  .card.sel { border-color: var(--accent); }
+  .art { aspect-ratio: 2 / 3; width: 100%; display: block; object-fit: cover; background: #222a33; }
+  .noart {
+    aspect-ratio: 2 / 3; display: flex; align-items: center; justify-content: center; text-align: center;
+    padding: 12px; font-weight: 600; color: var(--muted); background: linear-gradient(160deg, #26303c, #1a2029);
+  }
+  .meta { padding: 7px 9px 9px; }
+  .name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub { font-size: 11px; color: var(--muted); }
+  .tick {
+    position: absolute; top: 8px; left: 8px; width: 22px; height: 22px; border-radius: 5px;
+    background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.35);
+    display: flex; align-items: center; justify-content: center; font-size: 14px; color: #fff;
+  }
+  .card.sel .tick { background: var(--accent); border-color: var(--accent); }
+  .badge {
+    position: absolute; top: 8px; right: 8px; font-size: 11px; font-weight: 600;
+    padding: 2px 7px; border-radius: 10px; background: rgba(10,12,16,.75);
+  }
+  .badge.in { color: var(--ok); }
+  .badge.tool { color: var(--warn); }
+  .empty { color: var(--muted); text-align: center; padding: 60px 0; }
+
+  footer {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    padding: 12px 18px; background: var(--panel); border-top: 1px solid var(--line);
+  }
+  #status { color: var(--muted); font-size: 13px; }
+  .banner { padding: 9px 18px; font-size: 13px; background: #3a2b12; color: #f3cf8a; border-bottom: 1px solid #5a4418; }
+  .banner.err { background: #3a1717; color: #f3a3a3; border-color: #5a2323; }
+
+  dialog {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+    padding: 0; width: min(640px, 92vw); max-height: 80vh;
+  }
+  dialog::backdrop { background: rgba(0,0,0,.55); }
+  dialog h2 { font-size: 15px; margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  dialog .body { padding: 10px 18px; overflow-y: auto; max-height: 55vh; }
+  dialog .row { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  dialog .row:last-child { border-bottom: 0; }
+  dialog .row .s { width: 18px; flex: none; }
+  dialog .row .d { color: var(--muted); margin-left: auto; text-align: right; }
+  dialog .foot { padding: 12px 18px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 10px; align-items: center; }
+  .ok { color: var(--ok); } .err { color: var(--err); } .warn { color: var(--warn); }
+  .spinner {
+    width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; vertical-align: -2px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Steam <span>→</span> Apollo</h1>
+  <div class="env" id="env"></div>
+  <div class="spacer"></div>
+  <label class="chk" title="Which streaming host's app list to edit">
+    Target
+    <select id="target"></select>
+  </label>
+  <button id="refresh" title="Rescan Steam and Apollo">Refresh</button>
+</header>
+<div id="banners"></div>
+<div class="toolbar">
+  <input type="search" id="q" placeholder="Search games…" autofocus>
+  <div class="seg" id="filter">
+    <button data-f="all" class="on">All</button>
+    <button data-f="out">Not in Apollo</button>
+    <button data-f="in">In Apollo</button>
+  </div>
+  <label class="chk"><input type="checkbox" id="tools"> Show tools &amp; runtimes</label>
+  <div class="spacer"></div>
+  <button class="link" id="selAll">Select all shown</button>
+  <button class="link" id="selNone">Clear selection</button>
+</div>
+<main><div class="grid" id="grid"></div><div class="empty" id="empty" hidden></div></main>
+<footer>
+  <span id="status"><span class="spinner"></span> Scanning…</span>
+  <div class="spacer"></div>
+  <label class="chk" title="Apollo only reloads its app list on restart. Active streams will be disconnected.">
+    <input type="checkbox" id="restart" checked> Restart Apollo after saving
+  </label>
+  <button class="danger" id="remove" disabled>Remove from Apollo</button>
+  <button class="primary" id="add" disabled>Add to Apollo</button>
+</footer>
+
+<dialog id="dlg">
+  <h2 id="dlgTitle">Results</h2>
+  <div class="body" id="dlgBody"></div>
+  <div class="foot"><span id="dlgNote" class="sub"></span><div class="spacer"></div><button class="primary" id="dlgClose">Close</button></div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let state = null;
+let filter = "all";
+const selected = new Set();
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const gb = (n) => n ? (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + " GB" : "";
+
+async function load() {
+  $("status").innerHTML = '<span class="spinner"></span> Scanning…';
+  const t = $("target").value;
+  const res = await fetch("api/state" + (t ? "?target=" + encodeURIComponent(t) : ""));
+  state = await res.json();
+  // Drop selections for games that disappeared.
+  const ids = new Set(state.games.map((g) => g.appid));
+  for (const id of [...selected]) if (!ids.has(id)) selected.delete(id);
+  renderHeader();
+  render();
+}
+
+function renderHeader() {
+  const tgt = state.target;
+  const sel = $("target");
+  sel.innerHTML = (state.installs || []).map((i) =>
+    `<option value="${esc(i.service)}"${tgt && tgt.service === i.service ? " selected" : ""}>${esc(i.name)}${i.running ? "" : " (stopped)"}</option>`
+  ).join("");
+  sel.disabled = !state.installs || state.installs.length < 2;
+
+  const parts = [];
+  const libs = state.libraries || [];
+  parts.push(!state.steamRoot ? `<span class="bad">Steam not found</span>`
+    : `Steam ${libs.length === 1 ? "library" : `libraries (${libs.length})`} <b>${libs.map(esc).join(", ")}</b>`);
+  if (tgt) parts.push(`App list <b>${esc(tgt.appsFile)}</b> · ${state.appsCount} apps`);
+  $("env").innerHTML = parts.map((p) => `<span>${p}</span>`).join("");
+
+  const banners = [];
+  if (!state.elevated) banners.push(["", "Not running as administrator — Apollo's app list is in Program Files, so saving will likely fail. Right-click the exe → Run as administrator."]);
+  if (state.steamError) banners.push(["err", state.steamError]);
+  if (state.apolloError) banners.push(["err", state.apolloError]);
+  $("banners").innerHTML = banners.map(([c, m]) => `<div class="banner ${c}">${esc(m)}</div>`).join("");
+  $("restart").parentElement.lastChild.textContent = ` Restart ${tgt ? tgt.name : "Apollo"} after saving`;
+}
+
+function visible() {
+  const q = $("q").value.trim().toLowerCase();
+  const showTools = $("tools").checked;
+  return state.games.filter((g) =>
+    (showTools || !g.tool) &&
+    (filter === "all" || (filter === "in") === g.inApollo) &&
+    (!q || g.name.toLowerCase().includes(q) || g.appid === q)
+  );
+}
+
+function render() {
+  const list = visible();
+  const multiLib = (state.libraries || []).length > 1;
+  $("grid").innerHTML = list.map((g) => `
+    <div class="card${selected.has(g.appid) ? " sel" : ""}" data-id="${g.appid}" title="${esc(g.name)}\nApp ID ${g.appid}\n${esc(g.installDir)}">
+      ${g.hasCover
+        ? `<img class="art" loading="lazy" src="cover/${g.appid}" alt="">`
+        : `<div class="noart">${esc(g.name)}</div>`}
+      <div class="tick">${selected.has(g.appid) ? "✓" : ""}</div>
+      ${g.inApollo ? `<div class="badge in">In Apollo</div>` : g.tool ? `<div class="badge tool">Tool</div>` : ""}
+      <div class="meta"><div class="name">${esc(g.name)}</div><div class="sub">${g.appid}${multiLib ? " · " + esc(g.library.slice(0, 2).toUpperCase()) : ""}${g.sizeBytes ? " · " + gb(g.sizeBytes) : ""}</div></div>
+    </div>`).join("");
+  const empty = $("empty");
+  empty.hidden = list.length > 0;
+  empty.textContent = state.games.length ? "No games match the current filter." : "No installed Steam games found.";
+  updateFooter();
+}
+
+function updateFooter() {
+  const games = state.games.filter((g) => selected.has(g.appid));
+  const toAdd = games.filter((g) => !g.inApollo).length;
+  const toRemove = games.filter((g) => g.inApollo).length;
+  const name = state.target ? state.target.name : "Apollo";
+  $("add").textContent = `Add ${toAdd || ""} to ${name}`.replace("  ", " ");
+  $("remove").textContent = `Remove ${toRemove || ""} from ${name}`.replace("  ", " ");
+  $("add").disabled = !toAdd || !state.target;
+  $("remove").disabled = !toRemove || !state.target;
+  const total = state.games.filter((g) => !g.tool).length;
+  const inCount = state.games.filter((g) => g.inApollo).length;
+  $("status").textContent = `${total} games installed · ${inCount} already in ${name}` + (selected.size ? ` · ${selected.size} selected` : "");
+}
+
+$("grid").addEventListener("click", (e) => {
+  const card = e.target.closest(".card");
+  if (!card) return;
+  const id = card.dataset.id;
+  selected.has(id) ? selected.delete(id) : selected.add(id);
+  card.classList.toggle("sel", selected.has(id));
+  card.querySelector(".tick").textContent = selected.has(id) ? "✓" : "";
+  updateFooter();
+});
+$("grid").addEventListener("error", (e) => {
+  if (e.target.tagName !== "IMG") return;
+  const g = state.games.find((x) => x.appid === e.target.closest(".card").dataset.id);
+  e.target.outerHTML = `<div class="noart">${esc(g ? g.name : "")}</div>`;
+}, true);
+
+$("filter").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  filter = b.dataset.f;
+  for (const x of $("filter").children) x.classList.toggle("on", x === b);
+  render();
+});
+$("q").addEventListener("input", render);
+$("tools").addEventListener("change", render);
+$("target").addEventListener("change", load);
+$("refresh").addEventListener("click", load);
+$("selAll").addEventListener("click", () => { visible().forEach((g) => selected.add(g.appid)); render(); });
+$("selNone").addEventListener("click", () => { selected.clear(); render(); });
+$("dlgClose").addEventListener("click", () => $("dlg").close());
+
+async function apply(kind) {
+  const games = state.games.filter((g) => selected.has(g.appid) && (kind === "add" ? !g.inApollo : g.inApollo));
+  if (!games.length) return;
+  const name = state.target.name;
+  if (kind === "remove" && !confirm(`Remove ${games.length} game(s) from ${name}?`)) return;
+
+  for (const b of ["add", "remove", "refresh"]) $(b).disabled = true;
+  $("status").innerHTML = `<span class="spinner"></span> ${kind === "add" ? "Exporting" : "Removing"} ${games.length} game(s)…`;
+  let out;
+  try {
+    const res = await fetch("api/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target: state.target.service,
+        add: kind === "add" ? games.map((g) => g.appid) : [],
+        remove: kind === "remove" ? games.map((g) => g.appid) : [],
+        restart: $("restart").checked,
+      }),
+    });
+    out = await res.json();
+  } catch (err) {
+    out = { results: [], error: String(err) };
+  }
+  $("refresh").disabled = false;
+
+  $("dlgTitle").textContent = out.error ? "Nothing was saved" : `${kind === "add" ? "Added to" : "Removed from"} ${name}`;
+  const rows = out.results.map((r) =>
+    `<div class="row"><span class="s ${r.ok ? (r.detail ? "warn" : "ok") : "err"}">${r.ok ? (r.detail ? "!" : "✓") : "✕"}</span><span>${esc(r.name || r.appid)}</span><span class="d">${esc(r.detail || "")}</span></div>`
+  );
+  if (out.error) rows.unshift(`<div class="row"><span class="s err">✕</span><span class="err">${esc(out.error)}</span></div>`);
+  $("dlgBody").innerHTML = rows.join("");
+  $("dlgNote").innerHTML = out.restarted ? `<span class="ok">${esc(name)} restarted — changes are live.</span>`
+    : out.restartError ? `<span class="err">Restart failed: ${esc(out.restartError)}</span>`
+    : !out.error ? `Restart ${esc(name)} for changes to show up in Moonlight/Artemis.` : "";
+  $("dlg").showModal();
+  if (!out.error) selected.clear();
+  await load();
+}
+$("add").addEventListener("click", () => apply("add"));
+$("remove").addEventListener("click", () => apply("remove"));
+
+load().catch((err) => { $("status").textContent = "Failed to load: " + err; });
+</script>
+</body>
+</html>

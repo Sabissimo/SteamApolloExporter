@@ -1,0 +1,5 @@
+.vscode
+
+# Go build output
+/SteamApolloExporter.exe
+*.exe~
